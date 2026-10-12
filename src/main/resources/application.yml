@@ -1,0 +1,53 @@
+spring:
+  main:
+    banner-mode: off
+    # This is a CLI agent, not a server. spring-ai-starter-model-openai brings in WebFlux
+    # (for its reactive WebClient), which otherwise makes Boot try to boot a reactive
+    # web server and fail with "no ReactiveWebServerFactory bean".
+    web-application-type: none
+  datasource:
+    # Stage 3's pgvector store. Point these at a managed Postgres instead for anything beyond
+    # this PoC - pgvector itself just needs the `vector` extension available to CREATE EXTENSION.
+    url: jdbc:postgresql://${PGVECTOR_HOST:localhost}:${PGVECTOR_PORT:5432}/${PGVECTOR_DB:aimemory}
+    username: ${PGVECTOR_USER:aimemory}
+    password: ${PGVECTOR_PASSWORD:aimemory}
+  data:
+    redis:
+      # Stage 2 session state. Point these at a managed Redis instead for anything beyond this PoC.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
+  ai:
+    openai:
+      # OpenRouter is OpenAI-wire-compatible, so the OpenAI client talks to it unchanged.
+      base-url: https://openrouter.ai/api
+      api-key: ${OPENROUTER_API_KEY}
+      chat:
+        completions-path: /v1/chat/completions
+        options:
+          model: ${OPENROUTER_MODEL:nvidia/nemotron-3-super-120b-a12b:free}
+          temperature: 0.2
+      embedding:
+        # OpenRouter serves no embedding endpoint, so this bean is left disabled and the
+        # transformers (local ONNX) embedding model below is the only EmbeddingModel in context.
+        enabled: false
+    # Which EmbeddingModel implementation wins when more than one is on the classpath. Explicit
+    # here so both pgvector stores always land on the free local one, never on an API-backed
+    # embedding model added by a later stage.
+    model:
+      embedding: transformers
+    # No spring.ai.vectorstore.pgvector.* here: both pgvector stores are built by hand in
+    # agent/VectorStoreConfig.java, not by spring-ai-autoconfigure-vector-store-pgvector - see
+    # that class's javadoc for why (its autoconfigured bean backs off once a second VectorStore
+    # of any name exists in the context, which Stage 4 introduces).
+
+app:
+  memory:
+    # How long a session survives in Redis with no activity. One day is generous for a demo;
+    # a real support bot would tie this to how long a case realistically stays open.
+    session-ttl: P1D
+
+logging:
+  level:
+    root: warn
+    com.example.aimemory: info

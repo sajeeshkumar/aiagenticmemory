@@ -1,0 +1,32 @@
+# Redis for Stage 2+ session state. Persistence (appendonly) is on purely so stopping and
+# restarting the container - not just the Java process - still shows the memory survive.
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  # Stage 3's episodic memory store. pgvector/pgvector ships the `vector` extension
+  # preinstalled; Spring AI's own initialize-schema still has to CREATE EXTENSION / CREATE TABLE.
+  pgvector:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: aimemory
+      POSTGRES_USER: aimemory
+      POSTGRES_PASSWORD: aimemory
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgvector-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aimemory -d aimemory"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  redis-data:
+  pgvector-data:
